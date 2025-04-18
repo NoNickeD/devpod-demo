@@ -1,0 +1,6 @@
+.DS_Store
+.vscode
+.idea
+coverage.out
+.devcontainer.json
+devpod-demo

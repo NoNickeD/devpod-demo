@@ -1,0 +1,52 @@
+{
+    "name": "golang-aws-devpod",
+    "image": "mcr.microsoft.com/devcontainers/go:1.22",
+    "features": {
+      "ghcr.io/devcontainers/features/aws-cli:1": {
+        "version": "latest"
+      },
+      "ghcr.io/devcontainers/features/terraform:1": {
+        "version": "latest"
+      },
+      "ghcr.io/devcontainers/features/docker-in-docker:2": {
+        "version": "latest",
+        "moby": true
+      },
+      "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "golang.go",
+          "hashicorp.terraform",
+          "ms-azuretools.vscode-docker",
+          "eamodio.gitlens",
+          "streetsidesoftware.code-spell-checker",
+          "redhat.vscode-yaml",
+          "editorconfig.editorconfig"
+        ],
+        "settings": {
+          "go.toolsManagement.checkForUpdates": "local",
+          "go.useLanguageServer": true,
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "golang.go",
+          "files.autoSave": "afterDelay",
+          "files.autoSaveDelay": 1000
+        }
+      }
+    },
+    "mounts": [
+      "source=${env:HOME}/.aws,target=/home/vscode/.aws,type=bind",
+      "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+    "forwardPorts": [8080],
+    "postCreateCommand": "go mod tidy && go install github.com/cosmtrek/air@latest",
+    "remoteUser": "vscode",
+    "updateContentCommand": "go mod tidy",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace",
+    "containerEnv": {
+      "DOCKER_BUILDKIT": "1"
+    }
+  }
+  

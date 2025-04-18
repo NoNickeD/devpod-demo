@@ -1,0 +1,211 @@
+version: '3'
+
+vars:
+  APP_NAME: devpod-demo
+  DOCKER_IMAGE: devpod-demo
+  PORT: 8080
+  WORKSPACE_NAME: golang-aws-devpod
+  WORKSPACE_PROVIDER: docker
+
+tasks:
+  default:
+    desc: Show available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  # Setup tasks
+  setup:devpod:
+    desc: Install DevPod CLI and configure workspace
+    silent: true
+    cmds:
+      - |
+        if ! command -v devpod &> /dev/null; then
+          brew install loft-sh/tap/devpod
+        else
+          echo "DevPod is already installed"
+        fi
+      - |
+        if ! devpod provider list | grep -q "{{.WORKSPACE_PROVIDER}}"; then
+          echo "Adding Docker provider..."
+          devpod provider add docker
+        fi
+      - |
+        echo "Current providers:"
+        devpod provider list
+        echo "Setting Docker as default provider..."
+        devpod provider use {{.WORKSPACE_PROVIDER}} --reconfigure
+      - |
+        if ! docker info &> /dev/null; then
+          echo "Docker daemon is not running."
+          echo "Please start Docker Desktop manually and wait for it to be ready."
+          echo "You can start it from your Applications folder or using:"
+          echo "open -a Docker"
+          echo "Once Docker is running, run 'task devpod:up' again."
+          exit 1
+        fi
+      - echo "DevPod is now configured with {{.WORKSPACE_PROVIDER}} provider"
+
+  # Development tasks
+  dev:
+    desc: Start development environment with hot reload
+    silent: true
+    cmds:
+      - air
+
+  build:
+    desc: Build the Go binary
+    silent: true
+    cmds:
+      - go build -o {{.APP_NAME}} main.go
+
+  run:
+    desc: Run the Go app locally
+    silent: true
+    env:
+      AWS_SECRET_NAME: my-secret-name
+    cmds:
+      - go run main.go
+
+  # DevPod tasks
+  devpod:up:
+    desc: Launch DevPod workspace and check status
+    silent: true
+    cmds:
+      - |
+        if ! command -v devpod &> /dev/null; then
+          echo "DevPod CLI not found. Please run 'task setup:devpod' first"
+          exit 1
+        fi
+        if ! docker info &> /dev/null; then
+          echo "Docker daemon is not running."
+          echo "Please start Docker Desktop manually and wait for it to be ready."
+          echo "You can start it from your Applications folder or using:"
+          echo "open -a Docker"
+          echo "Once Docker is running, run 'task devpod:up' again."
+          exit 1
+        fi
+        echo "Checking provider configuration..."
+        devpod provider list
+        devpod up {{.WORKSPACE_NAME}} --source=local://$(pwd) --debug && devpod status {{.WORKSPACE_NAME}}
+
+  devpod:down:
+    desc: Stop DevPod workspace
+    silent: true
+    cmds:
+      - |
+        if ! command -v devpod &> /dev/null; then
+          echo "DevPod CLI not found. Please run 'task setup:devpod' first"
+          exit 1
+        fi
+        devpod stop {{.WORKSPACE_NAME}} --debug
+
+  devpod:status:
+    desc: Check DevPod workspace status
+    cmds:
+      - |
+        if ! command -v devpod &> /dev/null; then
+          echo "DevPod CLI not found. Please run 'task setup:devpod' first"
+          exit 1
+        fi
+        devpod status {{.WORKSPACE_NAME}} --debug
+
+  devpod:ssh:
+    desc: SSH into DevPod workspace
+    cmds:
+      - |
+        if ! command -v devpod &> /dev/null; then
+          echo "DevPod CLI not found. Please run 'task setup:devpod' first"
+          exit 1
+        fi
+        devpod ssh {{.WORKSPACE_NAME}} --debug
+
+  # Docker tasks
+  docker:build:
+    desc: Build the Docker image
+    silent: true
+    cmds:
+      - docker build -t {{.DOCKER_IMAGE}} .
+
+  docker:run:
+    desc: Run the container locally
+    env:
+      AWS_SECRET_NAME: my-secret-name
+    cmds:
+      - docker run --rm -e AWS_SECRET_NAME -p {{.PORT}}:{{.PORT}} {{.DOCKER_IMAGE}}
+
+  docker:push:
+    desc: Push the Docker image to registry
+    cmds:
+      - docker push {{.DOCKER_IMAGE}}
+
+  # Testing tasks
+  test:devpod:
+    desc: Test the DevPod workspace and application
+    silent: true
+    cmds:
+      - |
+        if ! devpod status {{.WORKSPACE_NAME}} | grep -q "Running"; then
+          echo "DevPod workspace is not running. Starting it..."
+          task devpod:up
+          echo "Waiting for workspace to be ready..."
+          sleep 10
+        fi
+        echo "Building application..."
+        go build -o {{.APP_NAME}} main.go
+        echo "Starting application in background..."
+        ./{{.APP_NAME}} &
+        APP_PID=$!
+        echo "Waiting for application to start..."
+        sleep 5
+        echo "Testing application..."
+        if curl -s http://localhost:{{.PORT}}/secret; then
+          echo -e "\nApplication test successful!"
+        else
+          echo -e "\nApplication test failed!"
+        fi
+        echo -e "\nRunning Go tests..."
+        go test -v ./...
+        echo "Stopping application..."
+        pkill -f {{.APP_NAME}} || true
+
+  test:
+    desc: Run Go tests
+    silent: true
+    cmds:
+      - go test -v ./...
+
+  test:coverage:
+    desc: Run Go tests with coverage
+    silent: true
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out
+
+  # Utility tasks
+  clean:
+    desc: Clean build artifacts
+    silent: true
+    cmds:
+      - rm -f {{.APP_NAME}}
+      - rm -f coverage.out
+      - go clean
+
+  lint:
+    desc: Run golangci-lint
+    silent: true
+    cmds:
+      - golangci-lint run
+
+  format:
+    desc: Format Go code
+    silent: true
+    cmds:
+      - go fmt ./...
+
+  # Health check
+  health:
+    desc: Check application health
+    silent: true
+    cmds:
+      - curl -s http://localhost:{{.PORT}}/secret
